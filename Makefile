@@ -1,18 +1,10 @@
 .PHONY: frontend webapp payment bench
 
-all: frontend webapp payment bench
+all: bench
 
-frontend:
-	cd webapp/frontend && make
-	cd webapp/frontend/dist && tar zcvf ../../../ansible/files/frontend.tar.gz .
-
-webapp:
-	tar zcvf ansible/files/webapp.tar.gz \
-	--exclude webapp/frontend \
-	webapp
-
-payment:
-	cd blackbox/payment && make && cp bin/payment_linux ../../ansible/roles/benchmark/files/payment
-
+start:
+	docker-compose -f webapp/docker-compose.yml -f webapp/docker-compose.${LANGUAGE}.yml up
+stop:
+	docker-compose -f webapp/docker-compose.yml -f webapp/docker-compose.${LANGUAGE}.yml down
 bench:
-	cd bench && make && cp -av bin/bench_linux ../ansible/roles/benchmark/files/bench && cp -av bin/benchworker_linux ../ansible/roles/benchmark/files/benchworker
+	bench/bin/bench_darwin run --payment=http://127.0.0.1:5000 --target=http://127.0.0.1:8080 --assetdir=webapp/frontend/dist | tee log_`date '+%s'`.log
