@@ -800,19 +800,30 @@ func trainSeatsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var seatInformationList []SeatInformation
+	type Info struct {
+		IsOccupied bool `db:"is_occupied"`
+	}
 
 	for _, seat := range seatList {
 
 		s := SeatInformation{seat.SeatRow, seat.SeatColumn, seat.SeatClass, seat.IsSmokingSeat, false}
 
-		seatReservationList := []SeatReservation{}
+		seatReservationList := []Info{}
 
-		query := `
-SELECT s.*
-FROM seat_reservations s, reservations r
+		query := `SELECT 1 as is_occupied
+FROM seat_reservations s inner join reservations r on s.reservation_id=r.reservation_id inner join station_master astation on r.arrival = astation.name inner join station_master dstation on r.departure = dstation.name
 WHERE
 	r.date=? AND r.train_class=? AND r.train_name=? AND car_number=? AND seat_row=? AND seat_column=?
 `
+		if train.IsNobori {
+			// 上り
+			query += fmt.Sprintf("AND NOT((%d < astation.id && %d <= astation.id) || (%d >= dstation.id && %d > dstation.id))", toStation.ID, fromStation.ID, toStation.ID, fromStation.ID)
+		} else {
+			// 下り
+			query += fmt.Sprintf("AND NOT((%d < dstation.id && %d <= dstation.id) || (%d >= astation.id && %d > astation.id))", fromStation.ID, toStation.ID, fromStation.ID, toStation.ID)
+		}
+
+		query += " LIMIT 1"
 
 		err = dbx.Select(
 			&seatReservationList, query,
@@ -828,50 +839,8 @@ WHERE
 			return
 		}
 
-		fmt.Println(seatReservationList)
-
-		for _, seatReservation := range seatReservationList {
-			reservation := Reservation{}
-			query = "SELECT * FROM reservations WHERE reservation_id=?"
-			err = dbx.Get(&reservation, query, seatReservation.ReservationId)
-			if err != nil {
-				panic(err)
-			}
-
-			var departureStation, arrivalStation Station
-			query = "SELECT * FROM station_master WHERE name=?"
-
-			err = dbx.Get(&departureStation, query, reservation.Departure)
-			if err != nil {
-				panic(err)
-			}
-			err = dbx.Get(&arrivalStation, query, reservation.Arrival)
-			if err != nil {
-				panic(err)
-			}
-
-			if train.IsNobori {
-				// 上り
-				if toStation.ID < arrivalStation.ID && fromStation.ID <= arrivalStation.ID {
-					// pass
-				} else if toStation.ID >= departureStation.ID && fromStation.ID > departureStation.ID {
-					// pass
-				} else {
-					s.IsOccupied = true
-				}
-
-			} else {
-				// 下り
-
-				if fromStation.ID < departureStation.ID && toStation.ID <= departureStation.ID {
-					// pass
-				} else if fromStation.ID >= arrivalStation.ID && toStation.ID > arrivalStation.ID {
-					// pass
-				} else {
-					s.IsOccupied = true
-				}
-
-			}
+		if len(seatReservationList) > 0 {
+			s.IsOccupied = true
 		}
 
 		fmt.Println(s.IsOccupied)
