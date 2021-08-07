@@ -14,7 +14,7 @@ clean:
 	cp /dev/null webapp/logs/mysql/mysql-slow.sql
 
 deploy: deploy_mark
-	# "練習環境(docker)のため、deployは何もしない。make startでgoのコンパイルもされる"
+# "練習環境(docker)のため、deployは何もしない。make startでgoのコンパイルもされる"
 
 deploy_mark:
 	./deployment_mark.sh
