@@ -11,4 +11,11 @@ bench:
 
 clean:
 	cp /dev/null webapp/logs/nginx/web_access.ltsv
-	cp /dev/null webapp/logs/mysql/mysql-slow.sql 
+	cp /dev/null webapp/logs/mysql/mysql-slow.sql
+
+deploy: deploy_mark
+	# "練習環境(docker)のため、deployは何もしない。make startでgoのコンパイルもされる"
+
+deploy_mark:
+	./deployment_mark.sh
+
