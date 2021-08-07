@@ -18,6 +18,7 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/gorilla/sessions"
 	"github.com/jmoiron/sqlx"
+	"github.com/newrelic/go-agent/v3/newrelic"
 	goji "goji.io"
 	"goji.io/pat"
 	"golang.org/x/crypto/pbkdf2"
@@ -30,6 +31,8 @@ var (
 )
 
 var dbx *sqlx.DB
+
+var app *newrelic.Application
 
 // DB定義
 
@@ -2078,6 +2081,7 @@ func dummyHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+
 	// MySQL関連のお膳立て
 	var err error
 
@@ -2121,9 +2125,17 @@ func main() {
 	}
 	defer dbx.Close()
 
+	app, err = newrelic.NewApplication(
+		newrelic.ConfigAppName("ISUCON9(GO)"),
+		newrelic.ConfigLicense(os.Getenv("NEW_RELIC_LICENSE_KEY")),
+		newrelic.ConfigDistributedTracerEnabled(true),
+		newrelic.ConfigDebugLogger(os.Stdout), // APM Agentの動作確認用 (確認できたら、この行消して良い)
+	)
+
 	// HTTP
 
 	mux := goji.NewMux()
+	mux.Use(nrt)
 
 	mux.HandleFunc(pat.Post("/initialize"), initializeHandler)
 	mux.HandleFunc(pat.Get("/api/settings"), settingsHandler)
@@ -2148,4 +2160,20 @@ func main() {
 	err = http.ListenAndServe(":8000", mux)
 
 	log.Fatal(err)
+}
+
+// net/http 用 middlewareの作成
+func nrt(inner http.Handler) http.Handler {
+	mw := func(w http.ResponseWriter, r *http.Request) {
+		txn := app.StartTransaction(r.Method + " " + r.URL.Path)
+		defer txn.End()
+
+		r = newrelic.RequestWithTransactionContext(r, txn)
+
+		txn.SetWebRequestHTTP(r)
+		w = txn.SetWebResponse(w)
+		inner.ServeHTTP(w, r)
+	}
+
+	return http.HandlerFunc(mw)
 }
